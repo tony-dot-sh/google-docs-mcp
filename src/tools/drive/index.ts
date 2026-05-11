@@ -10,7 +10,6 @@ import { register as getFolderInfo } from './getFolderInfo.js';
 import { register as moveFile } from './moveFile.js';
 import { register as copyFile } from './copyFile.js';
 import { register as renameFile } from './renameFile.js';
-import { register as deleteFile } from './deleteFile.js';
 import { register as createDocument } from './createDocument.js';
 import { register as createFromTemplate } from './createFromTemplate.js';
 import { register as downloadFile } from './downloadFile.js';
@@ -27,7 +26,6 @@ export function registerDriveTools(server: FastMCP) {
   moveFile(server);
   copyFile(server);
   renameFile(server);
-  deleteFile(server);
   createDocument(server);
   createFromTemplate(server);
   downloadFile(server);
