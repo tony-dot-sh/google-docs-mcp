@@ -211,13 +211,11 @@ export function register(server: FastMCP) {
           } else if (outputMime.startsWith('image/') && fileBuffer.length <= MAX_INLINE_BYTES) {
             content.push(await imageContent({ buffer: fileBuffer }));
           } else if (fileBuffer.length <= MAX_INLINE_BYTES) {
+            // Return binary files (PDF, DOCX, etc.) as base64 text so Claude can
+            // pipe the content to a temp file: echo "$base64" | base64 -d > file.pdf
             content.push({
-              type: 'resource' as const,
-              resource: {
-                uri: `gdrive:///${args.fileId}/${resolvedFileName}`,
-                blob: fileBuffer.toString('base64'),
-                mimeType: outputMime,
-              },
+              type: 'text' as const,
+              text: fileBuffer.toString('base64'),
             });
           } else {
             throw new UserError(
@@ -230,7 +228,11 @@ export function register(server: FastMCP) {
             text: JSON.stringify({
               fileName: resolvedFileName,
               originalMimeType,
+              mimeType: outputMime,
               sizeBytes: fileBuffer.length,
+              encoding: isTextMimeType(outputMime) || outputMime.startsWith('image/')
+                ? 'utf-8'
+                : 'base64',
             }),
           });
 
