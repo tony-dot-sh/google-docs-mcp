@@ -1,4 +1,5 @@
 import { gmail_v1 } from 'googleapis';
+import { UserError } from 'fastmcp';
 
 export function findHeaderValue(
   headers: gmail_v1.Schema$MessagePartHeader[] | undefined,
@@ -143,4 +144,73 @@ export function extractDomain(fromHeader: string | null): string | null {
   if (!fromHeader) return null;
   const match = fromHeader.match(/<?([^@<>\s]+)@([^>\s]+)>?/);
   return match ? match[2].toLowerCase() : null;
+}
+
+// ---------------------------------------------------------------------------
+// Attachment helpers — shared by getAttachment and saveAttachmentToDrive
+// ---------------------------------------------------------------------------
+
+export interface AttachmentPart {
+  partId: string | null;
+  filename: string;
+  mimeType: string;
+  size: number;
+  attachmentId: string;
+}
+
+export function collectAttachmentParts(payload?: gmail_v1.Schema$MessagePart): AttachmentPart[] {
+  const out: AttachmentPart[] = [];
+  if (!payload) return out;
+  const walk = (part: gmail_v1.Schema$MessagePart) => {
+    if (part.filename && part.body?.attachmentId) {
+      out.push({
+        partId: part.partId ?? null,
+        filename: part.filename,
+        mimeType: part.mimeType ?? 'application/octet-stream',
+        size: part.body.size ?? 0,
+        attachmentId: part.body.attachmentId,
+      });
+    }
+    if (part.parts) for (const sub of part.parts) walk(sub);
+  };
+  walk(payload);
+  return out;
+}
+
+/**
+ * Re-fetches the message and returns a guaranteed-fresh attachmentId for the
+ * named attachment. Called when an attachmentId from a prior tool call has
+ * become stale (e.g. after an OAuth token refresh between MCP calls).
+ */
+export async function fetchFreshAttachmentId(
+  gmail: gmail_v1.Gmail,
+  messageId: string,
+  filename: string
+): Promise<string> {
+  const res = await gmail.users.messages.get({
+    userId: 'me',
+    id: messageId,
+    format: 'full',
+  });
+  const match = collectAttachmentParts(res.data.payload).find((a) => a.filename === filename);
+  if (!match) {
+    throw new UserError(
+      `Attachment "${filename}" not found in message ${messageId}. ` +
+        'Verify the filename matches exactly what getMessage returned.'
+    );
+  }
+  return match.attachmentId;
+}
+
+/**
+ * Returns true when the Gmail API has rejected an attachmentId as stale or
+ * invalid — the signal to re-fetch a fresh one and retry.
+ */
+export function isStaleAttachmentError(error: any): boolean {
+  const msg = String(error?.message ?? '').toLowerCase();
+  return (
+    msg.includes('invalid attachment') ||
+    msg.includes('attachment token') ||
+    (error?.code === 400 && msg.includes('attachment'))
+  );
 }
