@@ -13,6 +13,7 @@ import { register as renameFile } from './renameFile.js';
 import { register as createDocument } from './createDocument.js';
 import { register as createFromTemplate } from './createFromTemplate.js';
 import { register as downloadFile } from './downloadFile.js';
+import { register as setFilePermission } from './setFilePermission.js';
 
 export function registerDriveTools(server: FastMCP) {
   listGoogleDocs(server);
@@ -29,4 +30,5 @@ export function registerDriveTools(server: FastMCP) {
   createDocument(server);
   createFromTemplate(server);
   downloadFile(server);
+  setFilePermission(server);
 }

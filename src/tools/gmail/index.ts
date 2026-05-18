@@ -12,6 +12,7 @@ import { register as getDraft } from './getDraft.js';
 import { register as updateDraft } from './updateDraft.js';
 import { register as sendDraft } from './sendDraft.js';
 import { register as triageInbox } from './triageInbox.js';
+import { register as createDraftWithAttachments } from './createDraftWithAttachments.js';
 
 export function registerGmailTools(server: FastMCP) {
   listMessages(server);
@@ -27,4 +28,5 @@ export function registerGmailTools(server: FastMCP) {
   updateDraft(server);
   sendDraft(server);
   triageInbox(server);
+  createDraftWithAttachments(server);
 }
