@@ -26,6 +26,7 @@ import { wrapServerForRemote } from './remoteWrapper.js';
 import { registerLandingPage } from './landingPage.js';
 import { registerDownloadRoute } from './downloadProxy.js';
 import { FirestoreTokenStorage } from './firestoreTokenStorage.js';
+import { FileTokenStorage } from './fileTokenStorage.js';
 import { logger } from './logger.js';
 
 // --- Auth subcommand ---
@@ -138,9 +139,12 @@ const oauthProxy = isRemote
       consentRequired: false,
       accessTokenTtl: 2592000,
       refreshTokenTtl: 2592000,
-      ...(process.env.TOKEN_STORE === 'firestore' && {
-        tokenStorage: new FirestoreTokenStorage(process.env.GCLOUD_PROJECT),
-      }),
+      tokenStorage:
+        process.env.TOKEN_STORE === 'firestore'
+          ? new FirestoreTokenStorage(process.env.GCLOUD_PROJECT)
+          : new FileTokenStorage(
+              process.env.TOKEN_STORE_PATH ?? '/var/lib/google-docs-mcp/tokens'
+            ),
     })
   : undefined;
 
