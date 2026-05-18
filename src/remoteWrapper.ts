@@ -39,6 +39,15 @@ function createClients(accessToken: string, refreshToken?: string): RequestClien
   auth.setCredentials({
     access_token: accessToken,
     refresh_token: refreshToken,
+    // FastMCP only refreshes stored Google tokens when the MCP Bearer token
+    // expires (30 days). The stored access_token is therefore always the
+    // original one from initial authorization and is stale after 1 hour.
+    // Setting expiry_date in the past tells google-auth-library to proactively
+    // refresh before the first API call rather than discovering the 401 mid-flight.
+    // This guarantees every tool invocation starts with a valid, consistent token,
+    // eliminating the race where back-to-back calls get different access tokens
+    // (the root cause of the Gmail attachmentId session-binding failures).
+    ...(refreshToken ? { expiry_date: 1 } : {}),
   });
   return {
     accessToken,
