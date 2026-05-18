@@ -14,6 +14,9 @@ import { register as createDocument } from './createDocument.js';
 import { register as createFromTemplate } from './createFromTemplate.js';
 import { register as downloadFile } from './downloadFile.js';
 import { register as setFilePermission } from './setFilePermission.js';
+import { register as getFilePermissions } from './getFilePermissions.js';
+import { register as updateFilePermission } from './updateFilePermission.js';
+import { register as removeFilePermission } from './removeFilePermission.js';
 
 export function registerDriveTools(server: FastMCP) {
   listGoogleDocs(server);
@@ -31,4 +34,7 @@ export function registerDriveTools(server: FastMCP) {
   createFromTemplate(server);
   downloadFile(server);
   setFilePermission(server);
+  getFilePermissions(server);
+  updateFilePermission(server);
+  removeFilePermission(server);
 }
