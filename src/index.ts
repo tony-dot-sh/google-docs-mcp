@@ -160,6 +160,30 @@ if (oauthProxy) {
     }
     return origIssue(clientId, upstreamTokens);
   };
+
+  // FastMCP's OAuthProxy does not include access_type=offline when redirecting
+  // to Google, so Google never returns a refresh_token. Without a refresh_token,
+  // the stored access_token goes stale after 1 hour and every tool call fails.
+  // Patch redirectToUpstream to inject the missing params so we always get a
+  // refresh_token, which google-auth-library can then use for silent renewal.
+  const origRedirect = (oauthProxy as any).redirectToUpstream.bind(oauthProxy);
+  (oauthProxy as any).redirectToUpstream = function (transaction: any) {
+    const response: Response = origRedirect(transaction);
+    const location = response.headers.get('Location');
+    if (location) {
+      const url = new URL(location);
+      url.searchParams.set('access_type', 'offline');
+      // prompt=consent guarantees Google re-issues a refresh_token even if the
+      // user previously authorized this app (Google omits refresh_token on
+      // repeat authorizations unless consent is re-shown).
+      url.searchParams.set('prompt', 'consent');
+      return new Response(null, {
+        headers: { Location: url.toString() },
+        status: 302,
+      });
+    }
+    return response;
+  };
 }
 
 const server = new FastMCP({

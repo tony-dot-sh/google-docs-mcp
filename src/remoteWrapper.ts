@@ -36,6 +36,11 @@ function checkDomain(idToken?: string): boolean {
 
 function createClients(accessToken: string, refreshToken?: string): RequestClients {
   const auth = new OAuth2Client(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
+  if (refreshToken) {
+    logger.info('[auth] refresh_token present — silent token renewal active');
+  } else {
+    logger.warn('[auth] no refresh_token in session — access_token will expire in ~1h');
+  }
   auth.setCredentials({
     access_token: accessToken,
     refresh_token: refreshToken,
@@ -48,6 +53,11 @@ function createClients(accessToken: string, refreshToken?: string): RequestClien
     // eliminating the race where back-to-back calls get different access tokens
     // (the root cause of the Gmail attachmentId session-binding failures).
     ...(refreshToken ? { expiry_date: 1 } : {}),
+  });
+  auth.on('tokens', (tokens) => {
+    if (tokens.access_token) {
+      logger.info('[auth] google-auth-library issued fresh access_token via refresh');
+    }
   });
   return {
     accessToken,
