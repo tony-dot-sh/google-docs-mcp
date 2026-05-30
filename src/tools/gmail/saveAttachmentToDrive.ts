@@ -1,8 +1,7 @@
 import type { FastMCP } from 'fastmcp';
 import { UserError } from 'fastmcp';
 import { z } from 'zod';
-import { Readable } from 'stream';
-import { getGmailClient, getDriveClient } from '../../clients.js';
+import { getGmailClient, getDriveClient, getAuthClient } from '../../clients.js';
 import { fetchFreshAttachmentId, isStaleAttachmentError } from './helpers.js';
 
 export function register(server: FastMCP) {
@@ -56,35 +55,30 @@ export function register(server: FastMCP) {
         let attachmentId =
           args.attachmentId ?? (await fetchFreshAttachmentId(gmail, args.messageId, args.filename));
 
-        let attachmentData: string;
+        const auth = await getAuthClient();
+
+        // Fetch raw bytes directly via the REST endpoint — avoids the base64 JSON
+        // response from the SDK method, so nothing is buffered in memory.
+        const getRawStream = async (id: string) => {
+          const url = `https://www.googleapis.com/gmail/v1/users/me/messages/${args.messageId}/attachments/${id}?alt=media`;
+          const res = await auth.request<NodeJS.ReadableStream>({ url, responseType: 'stream' });
+          return res.data;
+        };
+
+        let byteStream: NodeJS.ReadableStream;
         try {
-          const res = await gmail.users.messages.attachments.get({
-            userId: 'me',
-            messageId: args.messageId,
-            id: attachmentId,
-          });
-          if (!res.data.data) throw new UserError('Attachment returned no data. It may be empty or inaccessible.');
-          attachmentData = res.data.data;
+          byteStream = await getRawStream(attachmentId);
         } catch (err: any) {
           if (isStaleAttachmentError(err)) {
-            // Token was stale — re-fetch a fresh attachmentId and retry once
             log.warn(`attachmentId stale (${err.message}); re-fetching fresh ID and retrying…`);
             attachmentId = await fetchFreshAttachmentId(gmail, args.messageId, args.filename);
-            const res = await gmail.users.messages.attachments.get({
-              userId: 'me',
-              messageId: args.messageId,
-              id: attachmentId,
-            });
-            if (!res.data.data) throw new UserError('Attachment returned no data after retry.');
-            attachmentData = res.data.data;
+            byteStream = await getRawStream(attachmentId);
           } else {
             throw err;
           }
         }
 
-        // Gmail uses base64url — decode to raw bytes
-        const buffer = Buffer.from(attachmentData.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
-        log.info(`Attachment decoded (${buffer.length} bytes), uploading to Drive as "${args.filename}"`);
+        log.info(`Streaming attachment to Drive as "${args.filename}"`);
 
         const uploadResponse = await drive.files.create({
           requestBody: {
@@ -94,7 +88,7 @@ export function register(server: FastMCP) {
           },
           media: {
             mimeType: args.mimeType,
-            body: Readable.from(buffer),
+            body: byteStream,
           },
           fields: 'id,name,webViewLink,size',
           supportsAllDrives: true,
@@ -108,7 +102,7 @@ export function register(server: FastMCP) {
             id: file.id,
             name: file.name,
             url: file.webViewLink,
-            sizeBytes: buffer.length,
+            sizeBytes: file.size,
             folderId: args.folderId,
           },
           null,
