@@ -5,6 +5,7 @@ import { getDocsClient } from '../../clients.js';
 import { DocumentIdParameter, MarkdownConversionError } from '../../types.js';
 import * as GDocsHelpers from '../../googleDocsApiHelpers.js';
 import { insertMarkdown, formatInsertResult } from '../../markdown-transformer/index.js';
+import { TAB_BODY_RANGE_FIELDS } from '../docs/tabFieldMasks.js';
 
 export function register(server: FastMCP) {
   server.addTool({
@@ -47,9 +48,8 @@ export function register(server: FastMCP) {
         const doc = await docs.documents.get({
           documentId: args.documentId,
           includeTabsContent: !!args.tabId,
-          fields: args.tabId
-            ? 'tabs(tabProperties,documentTab(body(content(startIndex,endIndex))))'
-            : 'body(content(startIndex,endIndex))',
+          suggestionsViewMode: 'PREVIEW_WITHOUT_SUGGESTIONS',
+          fields: args.tabId ? TAB_BODY_RANGE_FIELDS : 'body(content(startIndex,endIndex))',
         });
 
         // 2. Calculate replacement range
@@ -113,9 +113,8 @@ export function register(server: FastMCP) {
           const docAfterDelete = await docs.documents.get({
             documentId: args.documentId,
             includeTabsContent: !!args.tabId,
-            fields: args.tabId
-              ? 'tabs(tabProperties,documentTab(body(content(startIndex,endIndex))))'
-              : 'body(content(startIndex,endIndex))',
+            suggestionsViewMode: 'PREVIEW_WITHOUT_SUGGESTIONS',
+            fields: args.tabId ? TAB_BODY_RANGE_FIELDS : 'body(content(startIndex,endIndex))',
           });
 
           let survivorContent: any;

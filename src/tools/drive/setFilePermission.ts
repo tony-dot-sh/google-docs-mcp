@@ -1,38 +1,47 @@
 import type { FastMCP } from 'fastmcp';
 import { UserError } from 'fastmcp';
 import { z } from 'zod';
+import { drive_v3 } from 'googleapis';
 import { getDriveClient } from '../../clients.js';
 
 export function register(server: FastMCP) {
   server.addTool({
     name: 'setFilePermission',
     description:
-      'Grants sharing permissions on a Google Drive file or folder. Use this to share documents with specific users, groups, a whole domain, or anyone with the link. Maps to drive.permissions.create.',
-    parameters: z.object({
-      fileId: z.string().describe('ID of the Drive file or folder to share.'),
+      "Sets a sharing permission on a Drive file or folder. Common case: type='anyone' with role='reader' enables 'anyone with the link can view'. Use type='user' with emailAddress to grant a specific person access. Returns the created permission record.",
+    parameters: z.strictObject({
+      fileId: z
+        .string()
+        .describe('The file or folder ID from a Drive URL or a previous tool result.'),
       role: z
-        .enum(['reader', 'writer', 'commenter'])
-        .describe('Access level to grant: reader (view), commenter (view + comment), or writer (edit).'),
+        .enum(['reader', 'commenter', 'writer'])
+        .describe(
+          'Access level granted. "reader" = view only, "commenter" = view + comment, "writer" = full edit.'
+        ),
       type: z
         .enum(['user', 'group', 'domain', 'anyone'])
         .describe(
-          'Who to share with: user (single email), group (Google Group email), domain (entire domain), or anyone (anyone with the link).'
+          'Who this permission applies to. "anyone" means anyone with the link (combine with allowFileDiscovery=false to keep it unlisted).'
         ),
-      emailAddress: z
-        .string()
-        .optional()
-        .describe('Email address of the recipient. Required when type is "user" or "group".'),
-      domain: z
-        .string()
-        .optional()
-        .describe('Domain to grant access to (e.g. "example.com"). Required when type is "domain".'),
+      emailAddress: z.string().optional().describe("Required when type is 'user' or 'group'."),
+      domain: z.string().optional().describe("Required when type is 'domain'."),
       sendNotificationEmail: z
         .boolean()
         .optional()
-        .default(false)
-        .describe('Whether to send a sharing notification email to the recipient. Defaults to false.'),
+        .describe(
+          'If true, Google sends a notification email when granting access to a user or group. Defaults to false.'
+        ),
+      allowFileDiscovery: z
+        .boolean()
+        .optional()
+        .describe(
+          "Only relevant for type='anyone' or 'domain'. If true, the file is discoverable via search; if false (default), only people with the direct link can find it."
+        ),
     }),
     execute: async (args, { log }) => {
+      const drive = await getDriveClient();
+      log.info(`Setting ${args.type}/${args.role} permission on file ${args.fileId}`);
+
       if ((args.type === 'user' || args.type === 'group') && !args.emailAddress) {
         throw new UserError(`emailAddress is required when type is "${args.type}".`);
       }
@@ -40,21 +49,22 @@ export function register(server: FastMCP) {
         throw new UserError('domain is required when type is "domain".');
       }
 
-      const drive = await getDriveClient();
-      log.info(`Granting ${args.role} to ${args.type} on file ${args.fileId}`);
+      const requestBody: drive_v3.Schema$Permission = {
+        role: args.role,
+        type: args.type,
+      };
+      if (args.emailAddress) requestBody.emailAddress = args.emailAddress;
+      if (args.domain) requestBody.domain = args.domain;
+      if (typeof args.allowFileDiscovery === 'boolean')
+        requestBody.allowFileDiscovery = args.allowFileDiscovery;
 
       try {
         const permRes = await drive.permissions.create({
           fileId: args.fileId,
-          supportsAllDrives: true,
+          requestBody,
           sendNotificationEmail: args.sendNotificationEmail ?? false,
-          fields: 'id,role,type,emailAddress',
-          requestBody: {
-            role: args.role,
-            type: args.type,
-            ...(args.emailAddress ? { emailAddress: args.emailAddress } : {}),
-            ...(args.domain ? { domain: args.domain } : {}),
-          },
+          supportsAllDrives: true,
+          fields: 'id,type,role,emailAddress,domain,allowFileDiscovery',
         });
 
         const fileRes = await drive.files.get({
@@ -69,6 +79,10 @@ export function register(server: FastMCP) {
             role: permRes.data.role,
             type: permRes.data.type,
             ...(permRes.data.emailAddress ? { emailAddress: permRes.data.emailAddress } : {}),
+            ...(permRes.data.domain ? { domain: permRes.data.domain } : {}),
+            ...(typeof permRes.data.allowFileDiscovery === 'boolean'
+              ? { allowFileDiscovery: permRes.data.allowFileDiscovery }
+              : {}),
             fileId: args.fileId,
             fileName: fileRes.data.name,
             sharingUrl: fileRes.data.webViewLink,
@@ -82,10 +96,8 @@ export function register(server: FastMCP) {
         if (error.code === 404) throw new UserError('File not found. Check the file ID.');
         if (error.code === 403)
           throw new UserError(
-            'Permission denied. You must own the file or have write access to change its sharing settings.'
+            'Permission denied. You may not have rights to share this file, or the requested permission conflicts with org policy.'
           );
-        if (error.code === 400)
-          throw new UserError(`Invalid permission request: ${error.message || 'Bad request'}`);
         throw new UserError(`Failed to set permission: ${error.message || 'Unknown error'}`);
       }
     },

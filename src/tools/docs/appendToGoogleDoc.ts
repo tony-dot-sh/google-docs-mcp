@@ -5,6 +5,7 @@ import { docs_v1 } from 'googleapis';
 import { getDocsClient } from '../../clients.js';
 import { DocumentIdParameter, NotImplementedError } from '../../types.js';
 import * as GDocsHelpers from '../../googleDocsApiHelpers.js';
+import { TAB_BODY_END_INDEX_FIELDS } from './tabFieldMasks.js';
 
 export function register(server: FastMCP) {
   server.addTool({
@@ -41,8 +42,9 @@ export function register(server: FastMCP) {
         const docInfo = await docs.documents.get({
           documentId: args.documentId,
           includeTabsContent: needsTabsContent,
+          suggestionsViewMode: 'PREVIEW_WITHOUT_SUGGESTIONS',
           fields: needsTabsContent
-            ? 'tabs(tabProperties,documentTab(body(content(endIndex)),documentStyle(pageSize)))'
+            ? TAB_BODY_END_INDEX_FIELDS
             : 'body(content(endIndex)),documentStyle(pageSize)',
         });
 

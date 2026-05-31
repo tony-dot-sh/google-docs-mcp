@@ -46,16 +46,7 @@ function isWorkspaceMimeType(mime: string): boolean {
   return mime.startsWith('application/vnd.google-apps.');
 }
 
-function ensureWithinCwd(filePath: string): string {
-  const cwd = path.resolve(process.cwd());
-  const resolved = path.resolve(filePath);
-  if (!resolved.startsWith(cwd + path.sep) && resolved !== cwd) {
-    throw new UserError('File path must be within the working directory.');
-  }
-  return resolved;
-}
-
-const DownloadFileParameters = z.object({
+const DownloadFileParameters = z.strictObject({
   fileId: z.string().describe('The file ID from a Google Drive URL or previous tool result.'),
   savePath: z
     .string()
@@ -241,7 +232,7 @@ export function register(server: FastMCP) {
 
         // ---------- Stdio mode: write to local disk ----------
         resolvedSavePath = args.savePath;
-        if (resolvedSavePath) resolvedSavePath = ensureWithinCwd(resolvedSavePath);
+        if (resolvedSavePath) resolvedSavePath = path.resolve(resolvedSavePath);
 
         if (!resolvedSavePath) {
           if (isWorkspace && exportMime) {
@@ -252,7 +243,7 @@ export function register(server: FastMCP) {
             resolvedSavePath = path.join(process.cwd(), fileName);
           }
         }
-        resolvedSavePath = ensureWithinCwd(resolvedSavePath);
+        resolvedSavePath = path.resolve(resolvedSavePath);
 
         fs.mkdirSync(path.dirname(resolvedSavePath), { recursive: true });
 
